@@ -50,14 +50,11 @@
 
 #include "syncTeX/synctex_parser.h"
 
-
 /* set up uri using appropriate formatting for OS
    http://en.wikipedia.org/wiki/File_URI_scheme#Linux */
 #ifdef WIN32
-    const gchar *urifrmt = "file:///";
     gint usize = 8;
 #else
-    const gchar *urifrmt = "file://";
     gint usize = 7;
 #endif
 
@@ -570,6 +567,7 @@ static void update_page_input(GuPreviewGui* pc) {
 }
 
 static void update_page_positions(GuPreviewGui* pc) {
+    //L_F_DEBUG;
 
     LayeredRectangle fov = get_fov(pc);
     int i;
@@ -921,11 +919,11 @@ static void load_document(GuPreviewGui* pc, gboolean update) {
     update_prev_next_page(pc);
 }
 
-void previewgui_set_pdffile (GuPreviewGui* pc, const gchar *pdffile) {
+void previewgui_set_pdffile (GuPreviewGui* pc, const gchar *uri) {
     //L_F_DEBUG;
     previewgui_cleanup_fds (pc);
 
-    pc->uri = g_strconcat (urifrmt, pdffile, NULL);
+    pc->uri = g_strdup(uri);
 
     pc->doc = poppler_document_new_from_file (pc->uri, NULL, NULL);
     g_return_if_fail (pc->doc != NULL);
@@ -966,12 +964,19 @@ void previewgui_set_pdffile (GuPreviewGui* pc, const gchar *pdffile) {
 
 void previewgui_refresh (GuPreviewGui* pc, GtkTextIter *sync_to,
         gchar* tex_file) {
+    //L_F_DEBUG;
     /* We lock the mutex to prevent previewing imcomplete PDF file, i.e
      * compiling. Also prevent PDF from changing (compiling) when previewing */
     if (!g_mutex_trylock (gummi->motion->compile_mutex)) return;
 
     /* This line is very important, if no pdf exist, preview will fail */
     if (!pc->uri || !utils_path_exists (pc->uri + usize)) goto unlock;
+
+    // If no document had been loaded successfully before, force call of set_pdffile
+    if (pc->doc == NULL) {
+        previewgui_set_pdffile (pc, pc->uri);
+        goto unlock;
+    }
 
     previewgui_cleanup_fds (pc);
 
@@ -1636,6 +1641,8 @@ static void paint_page (cairo_t *cr, GuPreviewGui* pc, gint page, gint x, gint y
 }
 
 static inline LayeredRectangle get_fov(GuPreviewGui* pc) {
+    //L_F_DEBUG;
+    
     LayeredRectangle fov;
     fov.x = gtk_adjustment_get_value(pc->hadj);
     fov.y = gtk_adjustment_get_value(pc->vadj);
@@ -1811,6 +1818,8 @@ gboolean on_expose (GtkWidget* w, GdkEventExpose* e, void* user) {
 
 //    slog(L_INFO, "paint document with scale %f, region (%i, %i), w=%i,
 //    h=%i\n", e->area.x, e->area.y, e->area.width, e->area.height);
+
+    //slog(L_INFO, "scale: %f", pc->scale);
 
     if (!pc->uri || !utils_path_exists (pc->uri + usize)) {
 
